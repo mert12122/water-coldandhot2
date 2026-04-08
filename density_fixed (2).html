@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Density Simulation</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 8px;
+            background: #1a1a2e;
+            overflow: hidden;
+        }
+        h1 {
+            text-align: center;
+            color: #ffffff;
+            font-size: 22px;
+            margin: 0 0 8px 0;
+        }
+        .container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: nowrap;
+            gap: 8px;
+        }
+        .simulation {
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            width: 340px;
+        }
+        .title {
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #34495e;
+        }
+        .beaker {
+            width: 310px;
+            height: 290px;
+            border: 3px solid #4a90d9;
+            border-top: none;
+            border-radius: 0 0 15px 15px;
+            position: relative;
+            margin: 0 auto;
+            overflow: hidden;
+            background: white;
+        }
+        .controls {
+            text-align: center;
+            margin-top: 8px;
+        }
+        button {
+            background: #4a90d9;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin: 3px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #357abd;
+        }
+        .status {
+            text-align: center;
+            margin-top: 5px;
+            font-weight: bold;
+            color: #34495e;
+            min-height: 16px;
+            font-size: 11px;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 6px;
+            font-size: 11px;
+            color: #34495e;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #aaa;
+        }
+        .info-box {
+            background: #ecf0f1;
+            color: #34495e;
+            padding: 8px;
+            border-radius: 6px;
+            margin-top: 8px;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌡️ Temperature & Density Experiment</h1>
+
+    <div class="container">
+        <!-- Scenario 1: Hot on Top (STABLE) -->
+        <div class="simulation">
+            <div class="title">Experiment 1</div>
+            <div class="beaker" id="beaker1">
+                <canvas id="canvas1" width="310" height="290" style="display:block;"></canvas>
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF0000;"></div>
+                    <span>Red (hot)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0066CC;"></div>
+                    <span>Blue (cold)</span>
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="startSimulation(1)">Remove Barrier</button>
+                <button onclick="resetSimulation(1)">Reset</button>
+            </div>
+            <div class="status" id="status1"></div>
+            <div class="info-box">
+                <strong>Setup:</strong> Hot red water on top, cold blue water on bottom. Click "Remove Barrier" and observe what happens.
+            </div>
+        </div>
+
+        <!-- Scenario 2: Cold on Top (UNSTABLE) -->
+        <div class="simulation">
+            <div class="title">Experiment 2</div>
+            <div class="beaker" id="beaker2">
+                <canvas id="canvas2" width="310" height="290" style="display:block;"></canvas>
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0066CC;"></div>
+                    <span>Blue (cold)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FF0000;"></div>
+                    <span>Red (hot)</span>
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="startSimulation(2)">Remove Barrier</button>
+                <button onclick="resetSimulation(2)">Reset</button>
+            </div>
+            <div class="status" id="status2"></div>
+            <div class="info-box">
+                <strong>Setup:</strong> Cold blue water on top, hot red water on bottom. Click "Remove Barrier" and observe what happens.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class Particle {
+            constructor(x, y, isHot, scenario) {
+                this.x = x;
+                this.y = y;
+                this.isHot = isHot;
+                this.scenario = scenario;
+                this.vx = 0;
+                this.vy = 0;
+                this.radius = 3;
+                this.mixAmount = 0;
+            }
+
+            getColor() {
+                if (this.isHot) {
+                    // Red → Purple when mixed
+                    const r = Math.floor(255 - this.mixAmount * 105); // 255 → 150
+                    const g = Math.floor(0 + this.mixAmount * 50);     // 0 → 50
+                    const b = Math.floor(0 + this.mixAmount * 150);    // 0 → 150
+                    return `rgba(${r}, ${g}, ${b}, 0.9)`;
+                } else {
+                    // Blue → Purple when mixed
+                    const r = Math.floor(0 + this.mixAmount * 150);    // 0 → 150
+                    const g = Math.floor(102 - this.mixAmount * 52);   // 102 → 50
+                    const b = Math.floor(204 - this.mixAmount * 54);   // 204 → 150
+                    return `rgba(${r}, ${g}, ${b}, 0.9)`;
+                }
+            }
+
+            update(particles) {
+                if (this.scenario === 1) {
+                    // STABLE: particles move horizontally freely, vertical motion tightly controlled
+                    const hotSpeed = this.isHot ? 1.4 : 0.5;
+                    this.vx += (Math.random() - 0.5) * 0.20 * hotSpeed;
+                    this.vy += (Math.random() - 0.5) * 0.08 * hotSpeed;
+
+                    // Hot particles move more vigorously to spread out naturally
+
+                    // Restoration: keep hot in top half, cold in bottom half
+                    if (this.isHot) {
+                        if (this.y > 145) {
+                            this.vy -= 0.08 + (this.y - 145) * 0.015;
+                        }
+                    } else {
+                        if (this.y < 145) {
+                            this.vy += 0.08 + (145 - this.y) * 0.015;
+                        }
+                    }
+                    
+                } else {
+                    // UNSTABLE: hot faster than cold, overall speed matches original
+                    if (this.isHot) {
+                        this.vx += (Math.random() - 0.5) * 0.16;
+                        this.vy += (Math.random() - 0.5) * 0.16;
+                    } else {
+                        this.vx += (Math.random() - 0.5) * 0.08;
+                        this.vy += (Math.random() - 0.5) * 0.08;
+                    }
+
+                    // Gentle spreading force - push away from nearby particles
+                    let nearbyCount = 0;
+                    let pushX = 0, pushY = 0;
+                    for (let other of particles) {
+                        if (other === this) continue;
+                        const dx = this.x - other.x;
+                        const dy = this.y - other.y;
+                        const distSq = dx * dx + dy * dy;
+                        if (distSq < 100 && distSq > 0) {
+                            const dist = Math.sqrt(distSq);
+                            pushX += dx / dist;
+                            pushY += dy / dist;
+                            nearbyCount++;
+                        }
+                    }
+                    if (nearbyCount > 8) {
+                        this.vx += pushX * 0.008;
+                        this.vy += pushY * 0.008;
+                    }
+                    
+                    const buoyancyStrength = 0;
+                    if (this.isHot) {
+                        this.vy -= buoyancyStrength;
+                    } else {
+                        this.vy += buoyancyStrength;
+                    }
+                    
+                    if (this.x < 8) {
+                        this.vx += 0.04;
+                    } else if (this.x > 302) {
+                        this.vx -= 0.04;
+                    }
+                    
+
+                }
+
+                if (simulations[this.scenario].running) {
+                    this.mixWithNearby(particles);
+                }
+
+                this.vx *= 0.93;
+                this.vy *= 0.93;
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < this.radius) {
+                    this.x = this.radius;
+                    this.vx = Math.abs(this.vx) * 0.5;
+                }
+                if (this.x > 310 - this.radius) {
+                    this.x = 310 - this.radius;
+                    this.vx = -Math.abs(this.vx) * 0.5;
+                }
+                if (this.y < this.radius) {
+                    this.y = this.radius;
+                    this.vy = Math.abs(this.vy) * 0.5;
+                }
+                if (this.y > 290 - this.radius) {
+                    this.y = 290 - this.radius;
+                    this.vy = -Math.abs(this.vy) * 0.5;
+                }
+            }
+
+            mixWithNearby(particles) {
+                const mixRadius = 45;
+                let oppositeCount = 0;
+                let totalMixAmount = 0;
+                let nearbyCount = 0;
+
+                for (let other of particles) {
+                    if (other === this) continue;
+                    
+                    const dx = other.x - this.x;
+                    const dy = other.y - this.y;
+                    const distSq = dx * dx + dy * dy;
+
+                    if (distSq < mixRadius * mixRadius) {
+                        nearbyCount++;
+                        totalMixAmount += other.mixAmount;
+                        
+                        if (other.isHot !== this.isHot) {
+                            oppositeCount++;
+                        }
+                    }
+                }
+
+                if (nearbyCount > 0) {
+                    const avgNearbyMix = totalMixAmount / nearbyCount;
+                    const contactRatio = oppositeCount / nearbyCount;
+                    
+                    if (this.scenario === 1) {
+                        // Stable - small purple band right at boundary only
+                        if (oppositeCount >= 2 && contactRatio > 0.3) {
+                            this.mixAmount += 0.006;
+                        } else {
+                            // Fade back to original color when not at boundary
+                            this.mixAmount *= 0.98;
+                        }
+                        this.mixAmount = Math.min(this.mixAmount, 0.7);
+                    } else {
+                        this.mixAmount += contactRatio * 0.05;
+                        this.mixAmount += (avgNearbyMix - this.mixAmount) * 0.04;
+                        this.mixAmount += 0.002;
+                    }
+                }
+                
+                this.mixAmount = Math.max(0, Math.min(1, this.mixAmount));
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = this.getColor();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        const simulations = {
+            1: { particles: [], running: false, canvas: null, ctx: null, topupInterval: null },
+            2: { particles: [], running: false, canvas: null, ctx: null, topupInterval: null }
+        };
+
+        function initSimulation(scenario) {
+            const canvas = document.getElementById(`canvas${scenario}`);
+            const ctx = canvas.getContext('2d');
+            
+            simulations[scenario].canvas = canvas;
+            simulations[scenario].ctx = ctx;
+            simulations[scenario].particles = [];
+
+            const hotCount = 400;   // fewer than cold — hot water is less dense, but enough to fill space
+            const coldCount = 550;  // more — cold water is denser, particles closer together
+            
+            if (scenario === 1) {
+                for (let i = 0; i < hotCount; i++) {
+                    const x = 3 + Math.random() * 304;
+                    const y = Math.random() * 143;
+                    simulations[scenario].particles.push(
+                        new Particle(x, y, true, scenario)
+                    );
+                }
+                for (let i = 0; i < coldCount; i++) {
+                    const x = 3 + Math.random() * 304;
+                    const y = 147 + Math.random() * 140;
+                    simulations[scenario].particles.push(
+                        new Particle(x, y, false, scenario)
+                    );
+                }
+            } else {
+                const particleCount = 450;
+                for (let i = 0; i < particleCount; i++) {
+                    const x = 3 + Math.random() * 304;
+                    const y = Math.random() * 143;
+                    simulations[scenario].particles.push(
+                        new Particle(x, y, false, scenario)
+                    );
+                }
+                for (let i = 0; i < particleCount; i++) {
+                    const x = 3 + Math.random() * 304;
+                    const y = 147 + Math.random() * 140;
+                    simulations[scenario].particles.push(
+                        new Particle(x, y, true, scenario)
+                    );
+                }
+            }
+
+            drawSimulation(scenario);
+        }
+
+        function drawSimulation(scenario) {
+            const { ctx, particles } = simulations[scenario];
+            
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, 310, 290);
+            
+            particles.forEach(p => p.draw(ctx));
+        }
+
+        function animate(scenario) {
+            if (!simulations[scenario].running) return;
+
+            const particles = simulations[scenario].particles;
+            particles.forEach(p => p.update(particles));
+            drawSimulation(scenario);
+
+            requestAnimationFrame(() => animate(scenario));
+        }
+
+        function startSimulation(scenario) {
+            if (simulations[scenario].running) return;
+            
+            simulations[scenario].running = true;
+            document.getElementById(`status${scenario}`).textContent = 'Barrier removed...';
+            
+            // Add extra particles at top for scenario 2 to prevent gap
+            if (scenario === 2) {
+                // No topup needed - just start with enough particles
+            }
+            
+            animate(scenario);
+
+            if (scenario === 1) {
+                setTimeout(() => {
+                    if (simulations[scenario].running) {
+                        document.getElementById(`status${scenario}`).textContent = '✓ Layers remain separate';
+                    }
+                }, 3000);
+            } else {
+                setTimeout(() => {
+                    if (simulations[scenario].running) {
+                        document.getElementById(`status${scenario}`).textContent = '✓ Mixing to purple!';
+                    }
+                }, 2000);
+            }
+        }
+
+        function resetSimulation(scenario) {
+            simulations[scenario].running = false;
+            if (simulations[scenario].topupInterval) {
+                clearInterval(simulations[scenario].topupInterval);
+                simulations[scenario].topupInterval = null;
+            }
+            document.getElementById(`status${scenario}`).textContent = '';
+            initSimulation(scenario);
+        }
+
+        window.onload = () => {
+            initSimulation(1);
+            initSimulation(2);
+        };
+    </script>
+</body>
+</html>
